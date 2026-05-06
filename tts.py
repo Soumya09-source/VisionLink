@@ -19,13 +19,16 @@ class TextToSpeech:
         
         print(f"[TTS] Initialized native macOS speech (voice: {self.voice}, rate: {self.rate})")
 
-    def speak(self, text: str) -> None:
+    def speak(self, text: str, interrupt: bool = False) -> None:
         """
         Non-blocking speak. If already speaking, the new message is ignored
-        to prevent overlapping/queue deadlocks.
+        unless interrupt=True, which stops ongoing speech and immediately speaks.
         """
         if not text or not str(text).strip():
             return
+            
+        if interrupt:
+            self.interrupt()
             
         with self._lock:
             if self._is_speaking:
@@ -54,13 +57,28 @@ class TextToSpeech:
             with self._lock:
                 self._is_speaking = False
 
+    def interrupt(self) -> None:
+        """Kills any ongoing native 'say' command to allow immediate interruption."""
+        try:
+            subprocess.run(
+                ["killall", "say"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except Exception as e:
+            print(f"[TTS Interrupt Error] {e}")
+        finally:
+            # Give the killed process' thread a tiny moment to exit its finally block
+            time.sleep(0.05)
+            with self._lock:
+                self._is_speaking = False
+
     def stop(self) -> None:
         """
         Compatibility method for main.py.
-        Could kill 'say' processes here if hard-stop is needed, 
-        but passive cleanup is safer.
         """
-        pass
+        self.interrupt()
 
 # ----------------------------------------------------------------------
 # Quick test
