@@ -1,0 +1,20 @@
+# Core AI Vision
+ultralytics==8.1.24
+opencv-python-headless==4.9.0.80
+
+# Speech Recognition (Offline)
+vosk==0.3.45
+
+# Text-to-Speech (Cross-platform)
+pyttsx3==2.90
+# Linux requires: sudo apt-get install espeak
+
+# Audio Output and Panning
+numpy==1.26.4
+PyAudio==0.2.14
+# macOS requires: brew install portaudio
+# Linux requires: sudo apt-get install portaudio19-dev
+# Windows requires no extra system dependencies for pyaudio (wheels available)
+
+# Other utilities
+pyobjc-framework-Speech; sys_platform == 'darwin' # macOS NSSpeechSynthesizer backend for pyttsx3

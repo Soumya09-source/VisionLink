@@ -19,7 +19,7 @@ import cv2
 
 from camera import CameraStream
 from detector import ObjectDetector
-from feedback.spatial_audio import SpatialAudio
+from feedback.tts import CrossPlatformTTS
 from core.scene_builder import SceneBuilder, summarize_scene
 from core.ocr_engine import OCREngine
 from feedback.alert_system import AlertSystem
@@ -35,7 +35,7 @@ def main():
 
     camera   = CameraStream(index=0)
     detector = ObjectDetector()
-    spatial_audio = SpatialAudio()
+    tts = CrossPlatformTTS()
 
     # ---------------------------------------------------------------
     # SceneBuilder — temporal smoothing (cooldown handled by AlertSystem now)
@@ -79,25 +79,25 @@ def main():
         print(f"[ACTION ROUTER] Executing: {cmd}")
         
         if cmd == "stop speaking":
-            spatial_audio.interrupt()
+            tts.interrupt()
             
         elif cmd == "pause alerts":
             alerts_paused = True
-            spatial_audio.play("Alerts paused.", "center", interrupt=True)
+            tts.speak("Alerts paused.", "center", interrupt=True)
             
         elif cmd == "resume alerts":
             alerts_paused = False
-            spatial_audio.play("Alerts resumed.", "center", interrupt=True)
+            tts.speak("Alerts resumed.", "center", interrupt=True)
             
         elif cmd == "what do you see":
             scene = scene_builder.get_current_scene()
             speech = summarize_scene(scene)
             if speech:
-                spatial_audio.play(speech, "center", interrupt=True)
+                tts.speak(speech, "center", interrupt=True)
                 last_spoken_text = speech
                 last_spoken_dir = "center"
             else:
-                spatial_audio.play("I don't see anything.", "center", interrupt=True)
+                tts.speak("I don't see anything.", "center", interrupt=True)
 
         elif cmd == "read text":
             scene = scene_builder.get_current_scene()
@@ -105,17 +105,17 @@ def main():
             if texts:
                 speech = ", ".join(t.get("content", "") for t in texts if t.get("content"))
                 speech = f"Text says: {speech}"
-                spatial_audio.play(speech, "center", interrupt=True)
+                tts.speak(speech, "center", interrupt=True)
                 last_spoken_text = speech
                 last_spoken_dir = "center"
             else:
-                spatial_audio.play("I don't see any text.", "center", interrupt=True)
+                tts.speak("I don't see any text.", "center", interrupt=True)
                 
         elif cmd == "repeat":
             if last_spoken_text:
-                spatial_audio.play(last_spoken_text, last_spoken_dir, interrupt=True)
+                tts.speak(last_spoken_text, last_spoken_dir, interrupt=True)
             else:
-                spatial_audio.play("Nothing to repeat.", "center", interrupt=True)
+                tts.speak("Nothing to repeat.", "center", interrupt=True)
 
         # ── Memory commands ──────────────────────────────────────────
         elif cmd == "remember this":
@@ -130,9 +130,9 @@ def main():
                         ocr_context = t.get("content")
                         break
                 visual_memory.remember_object(label, position, ocr_context)
-                spatial_audio.play(f"{label} remembered.", "center", interrupt=True)
+                tts.speak(f"{label} remembered.", "center", interrupt=True)
             else:
-                spatial_audio.play("Nothing visible to remember.", "center", interrupt=True)
+                tts.speak("Nothing visible to remember.", "center", interrupt=True)
 
         elif cmd == "what did you remember":
             memories = visual_memory.get_all_memories()
@@ -142,14 +142,14 @@ def main():
                     summary = labels[0]
                 else:
                     summary = ", ".join(labels[:-1]) + " and " + labels[-1]
-                spatial_audio.play(f"I remember {summary}.", "center", interrupt=True)
+                tts.speak(f"I remember {summary}.", "center", interrupt=True)
             else:
-                spatial_audio.play("I don't remember anything yet.", "center", interrupt=True)
+                tts.speak("I don't remember anything yet.", "center", interrupt=True)
 
         elif cmd.startswith("find "):
             target = cmd[len("find "):].strip()
             if not target:
-                spatial_audio.play("Please say what to find.", "center", interrupt=True)
+                tts.speak("Please say what to find.", "center", interrupt=True)
             else:
                 # First: check live scene (new canonical format)
                 scene = scene_builder.get_current_scene()
@@ -158,27 +158,27 @@ def main():
                 if matches:
                     pos = matches[0]["position"]
                     print(f"[MEMORY] Match found: {target} on {pos}")
-                    spatial_audio.play(f"{target} is {pos}.", pos, interrupt=True)
+                    tts.speak(f"{target} is {pos}.", pos, interrupt=True)
                 else:
                     # Fall back: check persistent memory
                     mem = visual_memory.find_memory(target)
                     if mem:
                         pos = mem["position"]
                         print(f"[MEMORY] Recalled from store: {target} was on {pos}")
-                        spatial_audio.play(f"I last saw {target} on the {pos}.", pos, interrupt=True)
+                        tts.speak(f"I last saw {target} on the {pos}.", pos, interrupt=True)
                     else:
-                        spatial_audio.play(f"I don't know where {target} is.", "center", interrupt=True)
+                        tts.speak(f"I don't know where {target} is.", "center", interrupt=True)
 
         elif cmd.startswith("forget "):
             target = cmd[len("forget "):].strip()
             if not target:
-                spatial_audio.play("Please say what to forget.", "center", interrupt=True)
+                tts.speak("Please say what to forget.", "center", interrupt=True)
             else:
                 removed = visual_memory.forget_memory(target)
                 if removed:
-                    spatial_audio.play(f"{target} forgotten.", "center", interrupt=True)
+                    tts.speak(f"{target} forgotten.", "center", interrupt=True)
                 else:
-                    spatial_audio.play(
+                    tts.speak(
                         f"I don't have {target} in memory.", "center", interrupt=True
                     )
 
@@ -244,7 +244,7 @@ def main():
             else:
                 print(f"[Scene Summary] {speech}")
                 
-            spatial_audio.play(speech, direction, interrupt=is_critical)
+            tts.speak(speech, direction, interrupt=is_critical)
             last_spoken_text = speech
             last_spoken_dir = direction
             
