@@ -35,7 +35,10 @@ scene = scene_builder.process_frame(detections, ocr_results=speakable_ocr)
 print(f"Scene Snapshot: {scene}")
 
 print("\n[STEP 4] Get Speech Update")
-speech = scene_builder.get_speech_update()
+# Generate speech from scene using the correct API
+from core.scene_builder import summarize_scene
+scene = scene_builder.get_current_scene()
+speech = summarize_scene(scene)
 print(f"Speech: {speech}")
 
 if speech:

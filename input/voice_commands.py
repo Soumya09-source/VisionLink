@@ -94,6 +94,8 @@ class VoiceCommandManager:
         self._pa = None
 
         self._is_listening = False
+        self._continuous_mode = False
+        self._continuous_thread = None
         self._lock = threading.Lock()
 
     def _initialize(self):
@@ -115,9 +117,15 @@ class VoiceCommandManager:
         try:
             self.model = vosk.Model(self.model_path)
 
-            # Grammar-constrained recognizer: far more accurate than open vocab
-            grammar_json = json.dumps(_GRAMMAR_COMMANDS)
-            self.recognizer = vosk.KaldiRecognizer(self.model, SAMPLE_RATE, grammar_json)
+            # Try grammar-constrained first, fallback to open vocabulary if needed
+            try:
+                grammar_json = json.dumps(_GRAMMAR_COMMANDS)
+                self.recognizer = vosk.KaldiRecognizer(self.model, SAMPLE_RATE, grammar_json)
+                self._grammar_mode = True
+            except Exception:
+                # Fallback to open vocabulary if grammar fails
+                self.recognizer = vosk.KaldiRecognizer(self.model, SAMPLE_RATE)
+                self._grammar_mode = False
 
             self._pa = pyaudio.PyAudio()
 
@@ -171,6 +179,38 @@ class VoiceCommandManager:
 
         thread = threading.Thread(target=self._listen_worker, args=(timeout,), daemon=True)
         thread.start()
+
+    def start_continuous(self, listen_window: float = 3.0, gap: float = 1.0):
+        """
+        Starts continuous listening mode.
+        Listens for `listen_window` seconds, waits `gap` seconds, repeats.
+        """
+        with self._lock:
+            if self._continuous_mode:
+                print("[VOICE] Continuous listening already active.")
+                return
+            
+            self._continuous_mode = True
+            print(f"[VOICE] Starting continuous listening (window: {listen_window}s, gap: {gap}s)")
+            
+        self._continuous_thread = threading.Thread(
+            target=self._continuous_worker,
+            args=(listen_window, gap),
+            daemon=True
+        )
+        self._continuous_thread.start()
+
+    def stop_continuous(self):
+        """Stops continuous listening mode."""
+        with self._lock:
+            if not self._continuous_mode:
+                return
+            
+            self._continuous_mode = False
+            print("[VOICE] Stopping continuous listening...")
+        
+        if self._continuous_thread:
+            self._continuous_thread.join(timeout=2.0)
 
     def _listen_worker(self, timeout: float):
         try:
@@ -230,20 +270,42 @@ class VoiceCommandManager:
         text = text.lower().strip()
         print(f"[VOICE] Recognized: {text}")
 
-        # 1. Check variable-prefix commands first (e.g. "find bottle", "forget chair")
+        # More flexible matching for both grammar and open vocabulary modes
         matched_cmd = None
+        
+        # 1. Check variable-prefix commands first (e.g. "find bottle", "forget chair")
         for prefix in self.PREFIX_COMMANDS:
             if text.startswith(prefix):
-                # Pass the full text so the router can extract the label
                 matched_cmd = text   # e.g. "find bottle"
                 break
-
-        # 2. Fall back to fixed-command substring matching
+        
+        # 2. More flexible fixed-command matching (contains or similar)
         if matched_cmd is None:
+            # Direct matches first
             for cmd in self.ALLOWED_COMMANDS:
                 if cmd in text:
                     matched_cmd = cmd
                     break
+            
+            # Fuzzy matching for open vocabulary mode
+            if matched_cmd is None and not self._grammar_mode:
+                # Simple keyword matching for open vocabulary
+                if any(word in text for word in ["what", "see"]):
+                    matched_cmd = "what do you see"
+                elif any(word in text for word in ["read", "text"]):
+                    matched_cmd = "read text"
+                elif any(word in text for word in ["stop", "speaking"]):
+                    matched_cmd = "stop speaking"
+                elif any(word in text for word in ["pause", "alerts"]):
+                    matched_cmd = "pause alerts"
+                elif any(word in text for word in ["resume", "alerts"]):
+                    matched_cmd = "resume alerts"
+                elif any(word in text for word in ["repeat"]):
+                    matched_cmd = "repeat"
+                elif any(word in text for word in ["remember"]):
+                    matched_cmd = "remember this"
+                elif any(word in text for word in ["remembered", "memory"]):
+                    matched_cmd = "what did you remember"
 
         if matched_cmd:
             print(f"[VOICE] Executing command: {matched_cmd}")
@@ -252,3 +314,31 @@ class VoiceCommandManager:
                 threading.Thread(target=self.command_callback, args=(matched_cmd,), daemon=True).start()
         else:
             print("[VOICE] Command not recognized (ignoring).")
+
+    def _continuous_worker(self, listen_window: float, gap: float):
+        """Worker thread for continuous listening mode."""
+        while self._continuous_mode:
+            try:
+                # Check if we should continue
+                with self._lock:
+                    if not self._continuous_mode:
+                        break
+                
+                # Wait for any existing listening to finish
+                while self._is_listening and self._continuous_mode:
+                    time.sleep(0.1)
+                
+                # Check again after waiting
+                with self._lock:
+                    if not self._continuous_mode:
+                        break
+                
+                # Listen for a window
+                self.listen_once(timeout=listen_window)
+                
+                # Gap between listening windows
+                time.sleep(gap)
+                
+            except Exception as e:
+                print(f"[VOICE Continuous Error] {e}")
+                time.sleep(gap)

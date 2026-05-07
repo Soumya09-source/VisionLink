@@ -185,7 +185,11 @@ def main():
     voice_manager = VoiceCommandManager(command_callback=handle_command)
 
     frame_index: int = 0
-    print("Running — press 'q' to quit, press 'v' to issue a voice command.")
+    print("Running — press 'q' to quit, press 'v' to issue voice command manually")
+    print("[VOICE] Starting continuous voice command recognition...")
+    
+    # Start continuous voice listening
+    voice_manager.start_continuous(listen_window=3.0, gap=1.5)
 
     while True:
         frame = camera.get_frame()
@@ -261,6 +265,9 @@ def main():
         elif key == ord("v"):
             voice_manager.listen_once(timeout=5.0)
 
+    # Stop continuous voice listening
+    voice_manager.stop_continuous()
+    
     camera.stop()
     cv2.destroyAllWindows()
     cv2.waitKey(1)   # macOS: helps GUI close cleanly
