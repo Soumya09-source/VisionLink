@@ -307,8 +307,9 @@ capable of:
 - seeing
 - reading
 - reasoning
-- guiding
+- guiding 
 - remembering
+- obstacle detection
 - communicating naturally
 
 for visually impaired users.
