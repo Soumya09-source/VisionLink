@@ -136,8 +136,7 @@ def main():
         return
     
     # Object detector
-    detector = ObjectDetector(model_path="models/yolov8n.pt", confidence=0.5)
-    print("[INIT] YOLO detector loaded")
+    detector = ObjectDetector(confidence=0.5)
     
     # Enhanced OCR engine
     ocr_engine = OCREngine(

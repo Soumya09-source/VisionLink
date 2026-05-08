@@ -19,10 +19,12 @@ import cv2
 
 from camera import CameraStream
 from detector import ObjectDetector
+from feedback import alert_system
 from feedback.tts import CrossPlatformTTS
 from core.scene_builder import SceneBuilder, summarize_scene
 from core.ocr_engine import OCREngine
 from feedback.alert_system import AlertSystem
+from core.openclaw_bridge import OpenClawBridge
 from input.voice_commands import VoiceCommandManager
 from memory.visual_memory import VisualMemory
 
@@ -42,7 +44,7 @@ def main():
     # ---------------------------------------------------------------
     scene_builder = SceneBuilder(
         persistence_frames=8,
-        cooldown_seconds=0.0, # Cooldown moved to AlertSystem
+        cooldown_seconds=10.0,#Cooldown moved to AlertSystem
     )
 
     # ---------------------------------------------------------------
@@ -62,10 +64,11 @@ def main():
     # ---------------------------------------------------------------
     ocr_engine = OCREngine(
         ocr_interval=30,
-        text_cooldown_seconds=8.0,
+        text_cooldown_seconds=10.0,
         gpu=False,
         debug=OCR_DEBUG,
     )
+    
 
     alerts_paused = False
     last_spoken_text = ""
@@ -73,6 +76,7 @@ def main():
 
     # Persistent visual memory — survives process restarts
     visual_memory = VisualMemory(store_path="memory_store.json")
+    openclaw_bridge = OpenClawBridge()
 
     def handle_command(cmd):
         nonlocal alerts_paused, last_spoken_text, last_spoken_dir
@@ -91,7 +95,9 @@ def main():
             
         elif cmd == "what do you see":
             scene = scene_builder.get_current_scene()
-            speech = summarize_scene(scene)
+            natural = openclaw_bridge.narrate(scene, False)
+            speech = natural if natural else summarize_scene(scene)
+            
             if speech:
                 tts.speak(speech, "center", interrupt=True)
                 last_spoken_text = speech
@@ -189,7 +195,7 @@ def main():
     print("[VOICE] Starting continuous voice command recognition...")
     
     # Start continuous voice listening
-    voice_manager.start_continuous(listen_window=3.0, gap=1.5)
+    #voice_manager.start_continuous(listen_window=3.0, gap=1.5)
 
     while True:
         frame = camera.get_frame()
@@ -229,32 +235,31 @@ def main():
         print(f"\n--- [SCENE FRAME {frame_index}] ---")
         print(json.dumps(scene, indent=2))
         print("------------------------------")
-
+        
         # 4. Alert System — evaluate priorities, suppress noise, generate speech
         speech, is_critical = alert_system.process_scene(scene)
 
         if speech and not alerts_paused:
-            # ── 4.1 Deduce dominant direction from JSON instead of string ─────
-            # We look at the highest-priority objects in the scene
+            # ── 4.1 Deduce dominant direction ────────────────────────────────
             objects = scene.get("objects", [])
             if objects:
                 direction = objects[0]["position"]
             else:
-                texts = scene.get("text", [])
-                direction = texts[0]["position"] if texts else "center"
+                texts_dir = scene.get("text", [])
+                direction = texts_dir[0]["position"] if texts_dir else "center"
+
+            # ── 4.2 OpenClaw natural narration (with fallback) ────────────────
+            natural = openclaw_bridge.narrate(scene, is_critical)
+            final_speech = natural if natural else speech
 
             if is_critical:
-                print(f"[CRITICAL ALERT] {speech}")
+                print(f"[CRITICAL ALERT] {final_speech}")
             else:
-                print(f"[Scene Summary] {speech}")
-                
-            tts.speak(speech, direction, interrupt=is_critical)
-            last_spoken_text = speech
+                print(f"[Scene Summary] {final_speech}")
+
+            tts.speak(final_speech, direction, interrupt=is_critical)
+            last_spoken_text = final_speech
             last_spoken_dir = direction
-            
-            # Only commit OCR cooldowns AFTER speech is confirmed.
-            # This prevents burning a text's cooldown when the system
-            # suppressed the announcement (e.g. low priority).
             ocr_engine.mark_spoken(speakable_ocr)
 
         # 5. Display annotated frame
