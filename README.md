@@ -313,3 +313,10 @@ capable of:
 - communicating naturally
 
 for visually impaired users.
+
+## Presentation
+
+[View Presentation PDF](presentation/MSRIT_SDS.pdf)
+
+## Demo Video
+https://drive.google.com/drive/folders/1nIcToTy2jeuUzIIx5nCc80H5_8rfQqeV?usp=sharing
