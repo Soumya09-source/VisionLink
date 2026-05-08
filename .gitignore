@@ -1,3 +1,10 @@
-.venv/
+venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.dll
+*.so
+*.lib
+dist/
+build/
